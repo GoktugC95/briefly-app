@@ -17,18 +17,24 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- OTURUM YÖNETİMİ (HAFIZA) ---
+# --- OTURUM YÖNETİMİ ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'user_plan' not in st.session_state:
     st.session_state['user_plan'] = 'free' 
 if 'username' not in st.session_state:
-    st.session_state['username'] = ''  # Kullanıcı adını burada saklayacağız
+    st.session_state['username'] = ''
+
+# --- GİZLİ ANAHTARI ALMA (SECRETS) ---
+# Eğer secrets ayarlandıysa oradan al, yoksa boş geç (Hata vermesin)
+try:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+except:
+    api_key = ""
 
 # --- FONKSİYONLAR ---
 
 def get_pdf_info(uploaded_file):
-    """PDF metnini ve sayfa sayısını alır."""
     text = ""
     reader = pdf.PdfReader(uploaded_file)
     num_pages = len(reader.pages)
@@ -38,9 +44,8 @@ def get_pdf_info(uploaded_file):
             text += page_text
     return text, num_pages
 
-def find_flash_model(api_key):
-    """Flash modelini otomatik bulur."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+def find_flash_model(key):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
     try:
         response = requests.get(url)
         if response.status_code == 200:
@@ -52,9 +57,8 @@ def find_flash_model(api_key):
     except:
         return "models/gemini-1.5-flash"
 
-def generate_content(api_key, model_name, prompt, text_content):
-    """Gemini API İsteği."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={api_key}"
+def generate_content(key, model_name, prompt, text_content):
+    url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={key}"
     headers = {'Content-Type': 'application/json'}
     full_prompt = f"{prompt}\n\n---\nMetin:\n{text_content}"
     data = {"contents": [{"parts": [{"text": full_prompt}]}]}
@@ -72,14 +76,15 @@ def generate_content(api_key, model_name, prompt, text_content):
 with st.sidebar:
     st.title("⚡ Briefly")
     
-    api_key = st.text_input("Google API Anahtarı:", type="password")
+    # API KUTUSU ARTIK YOK! (Gizlendi)
+    if not api_key:
+        st.error("⚠️ API Anahtarı Bulunamadı! (Secrets Ayarlarını Yapın)")
     
     st.markdown("---")
     
     # GİRİŞ EKRANI
     if not st.session_state['logged_in']:
         st.subheader("👤 Üye Girişi")
-        # Buradaki değişken ismini değiştirdik
         user_input = st.text_input("Kullanıcı Adı") 
         pass_input = st.text_input("Şifre", type="password")
         
@@ -87,13 +92,12 @@ with st.sidebar:
             if user_input == "demo" and pass_input == "123":
                 st.session_state['logged_in'] = True
                 st.session_state['user_plan'] = 'free'
-                st.session_state['username'] = user_input # İSMİ HAFIZAYA KAYDETTİK!
+                st.session_state['username'] = user_input
                 st.rerun()
             else:
                 st.error("Hatalı giriş! (Demo: demo / 123)")
     else:
-        # GİRİŞ YAPILMIŞ
-        current_user = st.session_state['username'] # Hafızadan okuyoruz
+        current_user = st.session_state['username']
         plan_color = "green" if st.session_state['user_plan'] == 'premium' else "orange"
         
         st.markdown(f"Hoşgeldin, **{current_user}**")
@@ -115,7 +119,8 @@ with st.sidebar:
 
 if not st.session_state['logged_in']:
     st.header("🚀 Akademik Okumalarınızı 10x Hızlandırın")
-    st.info("👈 Test etmek için sol menüden giriş yapın. (Kullanıcı: demo / Şifre: 123)")
+    st.markdown("### Giriş Yapın ve Hemen Başlayın")
+    st.info("👈 Sol menüden giriş yapın. (Kullanıcı: demo / Şifre: 123)")
 
 else:
     st.subheader("📄 Doküman Yükle & Analiz Et")
@@ -130,7 +135,7 @@ else:
 
     if uploaded_file and api_key:
         text_content, num_pages = get_pdf_info(uploaded_file)
-        st.write(f"📄 Sayfa Sayısı: **{num_pages}**")
+        st.caption(f"Sayfa Sayısı: {num_pages}")
         
         # KOTA KONTROLÜ
         can_proceed = True
@@ -145,7 +150,6 @@ else:
         if can_proceed:
             if st.button("Analizi Başlat"):
                 model_name = find_flash_model(api_key)
-                st.caption(f"Motor: {model_name}")
                 
                 with st.spinner("Briefly çalışıyor..."):
                     if action_type == "Özet Çıkar":
@@ -159,6 +163,3 @@ else:
                     st.markdown("### 🚀 Sonuçlar:")
                     st.write(result)
                     st.download_button("İndir", result, file_name="sonuc.txt")
-
-    elif not api_key:
-        st.warning("⚠️ Lütfen sol menüden API anahtarınızı girin.")
